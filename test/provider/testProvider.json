@@ -77,6 +77,10 @@
     "url": "https://www.willhaben.at/iad/immobilien/mietwohnungen/wien",
     "enabled": true
   },
+  "immoTt": {
+    "url": "https://immo.tt.com/kaufobjekt/wohnung/tirol/innsbruck-stadt?f%5Bprice%23t%7Cprice_t%40g%5D=450000&f%5Bprice%23v%7Cprice_t%40g%5D=false&f%5Bno_of_rooms%40f%5D=2&f%5Bliving%40f%5D=50",
+    "enabled": true
+  },
   "flatfox": {
     "url": "https://flatfox.ch/de/search/?east=8.62&north=47.43&south=47.32&west=8.44&object_category=APARTMENT&offer_type=RENT",
     "enabled": true

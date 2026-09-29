@@ -209,6 +209,7 @@ const FETCHED_PAGE_HOSTS = [
   'www.idealista.pt',
   'tecnocasa.it',
   'tecnorete.it',
+  'immo.tt.com',
 ];
 
 /** The app's api, on any of its three national hosts. `<cc>` follows the version in every path. */

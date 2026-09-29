@@ -153,7 +153,7 @@ async function downloadWillhabenFixtures(url) {
  * the elements again. A rendered fixture therefore carries the cards but not one figure the
  * provider reads, which is also why the provider itself makes a plain request.
  *
- * @param {string} name the provider, `tecnocasa` or `tecnorete`
+ * @param {string} name the provider, `tecnocasa`, `tecnorete` or `immoTt`
  * @param {import('../../lib/types/providerConfig.js').ProviderConfig} providerConfig the initialized provider config
  * @returns {Promise<void>}
  */
@@ -978,6 +978,8 @@ async function main() {
         break;
       case 'tecnocasa':
       case 'tecnorete':
+      // immo.tt.com is fetched the same way: one server rendered search page, then one advert.
+      case 'immoTt':
         await downloadTecnocasaGroupFixtures(name, runConfig);
         break;
       case 'idealista':

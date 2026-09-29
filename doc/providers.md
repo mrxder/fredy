@@ -7,7 +7,7 @@ platform into Fredy.
 > Always make sure the search results are sorted by **date**, so Fredy picks up the newest listings
 > first.
 
-## The 29 built-in providers
+## The 30 built-in providers
 
 **🇩🇪 Germany**
 
@@ -21,7 +21,7 @@ platform into Fredy.
 | McMakler | Wg gesucht | |
 
 **🇩🇪 Germany · 🇦🇹 Austria · 🇨🇭 Switzerland** · BETTERHOMES
-**🇦🇹 Austria** · willhaben · Immoscout Österreich
+**🇦🇹 Austria** · willhaben · Immoscout Österreich · immo.tt.com
 **🇨🇭 Switzerland** · Flatfox
 **🇪🇸 Spain · 🇮🇹 Italy · 🇵🇹 Portugal** · idealista
 **🇮🇹 Italy** · Subito · Tecnocasa · Tecnorete · Casa.it
@@ -85,6 +85,18 @@ share link.
 **Switzerland is not covered by this provider.** `immoscout24.ch` belongs to a different company and
 runs a different platform, with no listings in this index at all. Switzerland is served by Flatfox
 and BETTERHOMES.
+
+## immo.tt.com
+
+The property marketplace of the Tiroler Tageszeitung (`immoTt`), and in Tyrol often the place an
+advert appears first. Paste any search URL from the site, filters included
+(`/kaufobjekt/wohnung/tirol/innsbruck-stadt?f[price#t|price_t@g]=450000...`).
+
+Fredy always asks for the newest adverts first and reads the first 50, whatever sort order or page
+the pasted URL was on. The search page only names the municipality, so without detail fetching a
+listing is placed at that municipality. With detail fetching enabled for immo.tt.com, Fredy also
+reads the street, the exact coordinates, the full text, the Baujahr and the HWB class from each new
+advert. A "Preis auf Anfrage" advert has no price.
 
 ## idealista
 

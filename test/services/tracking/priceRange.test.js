@@ -139,6 +139,13 @@ const RECORDED_SEARCHES = [
     'https://www.bienici.com/recherche/location/paris-75000/appartement?prix-min=500&prix-max=1000',
     { min: 500, max: 1000 },
   ],
+  // The bounds are named after the site's form fields, brackets and all, and have to be matched
+  // decoded - the url carries them percent-encoded.
+  [
+    'immoTt',
+    'https://immo.tt.com/mietobjekt/wohnung/tirol/innsbruck-stadt?f%5Bprice%23f%7Cprice_f%40g%5D=500&f%5Bprice%23t%7Cprice_t%40g%5D=1000',
+    { min: 500, max: 1000 },
+  ],
   [
     'seloger',
     'https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=Apartment&locations=AD08FR31096&priceMin=500&priceMax=1000',

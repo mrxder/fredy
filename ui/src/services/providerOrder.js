@@ -60,6 +60,7 @@ export const PROVIDER_SIZE_ORDER = [
   // Austria
   'willhaben',
   'immoscoutAt',
+  'immoTt',
   // Switzerland
   'flatfox',
   // Spain, Italy and Portugal
