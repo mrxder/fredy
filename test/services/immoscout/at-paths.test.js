@@ -188,6 +188,28 @@ describe('#at-paths resolveAtPath()', () => {
     });
   });
 
+  // Reported from the field: "Real estate type not found: wohnung-mit-garage-kaufen". Only the
+  // rental half of several of these was registered.
+  it('resolves the buying half of the filter paths as well as the renting one', () => {
+    expect(resolveAtPath('wohnung-mit-garage-kaufen')).toEqual({
+      realType: 'apartmentbuy',
+      params: { equipment: ['parking'] },
+    });
+    expect(resolveAtPath('wohnung-mit-aufzug-kaufen').params).toEqual({ equipment: ['lift'] });
+    expect(resolveAtPath('neubauwohnung-kaufen').params).toEqual({ newbuilding: true });
+    expect(resolveAtPath('penthouse-mieten').params).toEqual({ apartmenttypes: ['penthouse'] });
+    expect(resolveAtPath('einfamilienhaus-kaufen')).toEqual({
+      realType: 'housebuy',
+      params: { buildingtypes: ['singlefamilyhouse'] },
+    });
+  });
+
+  // The site means a flat with a terrace, the API a building type, and the one finds a sixth of the
+  // other. Refused rather than quietly narrowed.
+  it('does not read a terrace flat purchase as the terraced building type', () => {
+    expect(resolveAtPath('terrassenwohnung-kaufen')).toBeNull();
+  });
+
   describe('generated paths', () => {
     it('reads an exact room count as the half-step range the API wants', () => {
       expect(resolveAtPath('3-zimmer-wohnung-mieten')).toEqual({

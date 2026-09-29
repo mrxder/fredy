@@ -489,6 +489,21 @@ describe('#immoscout-at URL conversion', () => {
     expect(() => convertAtWebToMobile(`${WIEN}/wg-zimmer-mieten`)).toThrow('no Austrian listings');
   });
 
+  it('should refuse a garage search the API has no Austrian listings for', () => {
+    expect(() => convertAtWebToMobile(`${WIEN}/garage-mieten`)).toThrow('no Austrian listings');
+    expect(() => convertAtWebToMobile(`${WIEN}/garagen`)).toThrow('no Austrian listings');
+  });
+
+  // Reported from the field: "Real estate type not found: wohnung-mit-garage-kaufen".
+  it('should read a buying filter path together with a feature filter after it', () => {
+    const params = atParamsOf(
+      'https://www.immobilienscout24.at/regional/tirol/innsbruck/wohnung-mit-garage-kaufen/parkplatz?numberOfRoomsFrom=2&outdoorSpaces=TERRACE%2CBALCONY%2CLOGGIA&primaryAreaFrom=49&primaryPriceFrom=200000&primaryPriceTo=450000',
+    );
+
+    expect(params.get('realestatetype')).toBe('apartmentbuy');
+    expect(params.get('equipment')).toBe('parking,balcony');
+  });
+
   // Registered as a plain building-plot search, it notified about every residential plot.
   it('should not read an agricultural search as a building-plot search', () => {
     expect(() => convertAtWebToMobile(`${WIEN}/agrarflaeche-kaufen`)).toThrow('Real estate type not found');
