@@ -469,6 +469,17 @@ describe('#immoscout-at URL conversion', () => {
     expect(params.get('equipment')).toBe('parking,garden,balcony');
   });
 
+  // Reported from the field: "Real estate type not found: immobilie-kaufen".
+  it('should read the buying half of the all-property search', () => {
+    const params = atParamsOf(
+      'https://www.immobilienscout24.at/regional/tirol/innsbruck/immobilie-kaufen/parkplatz?numberOfRoomsFrom=2&outdoorSpaces=TERRACE%2CBALCONY%2CLOGGIA&primaryAreaFrom=49&primaryPriceFrom=200000&primaryPriceTo=450000',
+    );
+
+    expect(params.get('realestatetype')).toBe('apartmentbuy,housebuy');
+    expect(params.get('equipment')).toBe('parking,balcony');
+    expect(params.get('price')).toBe('200000.0-450000.0');
+  });
+
   it('should stack a path feature filter onto the one the slug implied', () => {
     expect(atParamsOf(`${WIEN}/wohnung-mit-garage-mieten/keller`).get('equipment')).toBe('parking,cellar');
   });

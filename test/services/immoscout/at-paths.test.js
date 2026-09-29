@@ -175,6 +175,12 @@ describe('#at-paths resolveAtPath()', () => {
     expect(resolveAtPath('immobilien').realType).toEqual(['apartmentrent', 'apartmentbuy', 'houserent', 'housebuy']);
   });
 
+  // Reported from the field: "Real estate type not found: immobilie-kaufen".
+  it('resolves the buying and renting halves of the all-property path', () => {
+    expect(resolveAtPath('immobilie-kaufen').realType).toEqual(['apartmentbuy', 'housebuy']);
+    expect(resolveAtPath('immobilie-mieten').realType).toEqual(['apartmentrent', 'houserent']);
+  });
+
   it('carries a path-only filter along with its type', () => {
     expect(resolveAtPath('wohnung-mit-garage-mieten')).toEqual({
       realType: 'apartmentrent',
