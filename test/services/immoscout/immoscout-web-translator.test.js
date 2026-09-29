@@ -441,6 +441,38 @@ describe('#immoscout-at URL conversion', () => {
     expect(atParamsOf(`${WIEN}/wohnung-ab-3-zimmer-mieten?numberOfRoomsTo=4`).get('numberofrooms')).toBe('3.0-4.0');
   });
 
+  // Reported from the field: the outdoor filter was dropped with a "no translator" warning.
+  it('should translate the outdoor spaces filter into equipment', () => {
+    const params = atParamsOf(
+      'https://www.immobilienscout24.at/regional/tirol/innsbruck/immobilien?numberOfRoomsFrom=2&outdoorSpaces=GARDEN%2CTERRACE%2CBALCONY%2CLOGGIA&primaryAreaFrom=49&primaryPriceFrom=200000&primaryPriceTo=450000',
+    );
+
+    expect(params.get('equipment')).toBe('garden,balcony');
+    expect(params.get('geocodes')).toBe('/at/tirol/innsbruck');
+  });
+
+  // The garage lives in the path, the garden in the query; replacing one with the other dropped it.
+  it('should keep the equipment the path implied next to the outdoor spaces', () => {
+    expect(atParamsOf(`${WIEN}/wohnung-mit-garage-mieten?outdoorSpaces=GARDEN`).get('equipment')).toBe(
+      'parking,garden',
+    );
+  });
+
+  // Reported from the field: "Real estate type not found: parkplatz".
+  it('should read the feature filters the site writes after the type slug', () => {
+    const params = atParamsOf(
+      'https://www.immobilienscout24.at/regional/tirol/innsbruck/immobilien/parkplatz?numberOfRoomsFrom=2&outdoorSpaces=GARDEN%2CTERRACE%2CBALCONY%2CLOGGIA&primaryAreaFrom=49&primaryPriceFrom=200000&primaryPriceTo=450000',
+    );
+
+    expect(params.get('realestatetype')).toBe('apartmentrent,apartmentbuy,houserent,housebuy');
+    expect(params.get('geocodes')).toBe('/at/tirol/innsbruck');
+    expect(params.get('equipment')).toBe('parking,garden,balcony');
+  });
+
+  it('should stack a path feature filter onto the one the slug implied', () => {
+    expect(atParamsOf(`${WIEN}/wohnung-mit-garage-mieten/keller`).get('equipment')).toBe('parking,cellar');
+  });
+
   // The API has no Austrian flat shares; accepting the slug built a job that never found anything.
   it('should refuse a flat-share search the API has no Austrian listings for', () => {
     expect(() => convertAtWebToMobile(`${WIEN}/wg-zimmer-mieten`)).toThrow('no Austrian listings');

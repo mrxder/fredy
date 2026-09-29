@@ -9,7 +9,9 @@ import {
   ambiguousAlternativesFor,
   COMMERCIAL_SLUGS,
   listKnownAtPaths,
+  mergeAtParams,
   resolveAtPath,
+  resolveAtPathFilters,
   splitAtPath,
   toGeocode,
   translateAtQueryParams,
@@ -28,6 +30,7 @@ describe('#at-paths splitAtPath()', () => {
     expect(splitAtPath(segmentsOf('/regional/wien/wien/wohnung-mieten'))).toEqual({
       area: ['wien', 'wien'],
       slug: 'wohnung-mieten',
+      filters: [],
     });
   });
 
@@ -35,6 +38,7 @@ describe('#at-paths splitAtPath()', () => {
     expect(splitAtPath(segmentsOf('/regional/oesterreich/haus-kaufen'))).toEqual({
       area: ['oesterreich'],
       slug: 'haus-kaufen',
+      filters: [],
     });
   });
 
@@ -44,6 +48,7 @@ describe('#at-paths splitAtPath()', () => {
     expect(splitAtPath(segmentsOf('/regional/wien/wien/wohnung-mieten/seite-3'))).toEqual({
       area: ['wien', 'wien'],
       slug: 'wohnung-mieten',
+      filters: [],
     });
   });
 
@@ -51,6 +56,7 @@ describe('#at-paths splitAtPath()', () => {
     expect(splitAtPath(segmentsOf('/regional/wien/wien/wohnung-kaufen/aktualitaet'))).toEqual({
       area: ['wien', 'wien'],
       slug: 'wohnung-kaufen',
+      filters: [],
     });
   });
 
@@ -62,6 +68,65 @@ describe('#at-paths splitAtPath()', () => {
 
   it('reports no slug when the path names nothing but an area', () => {
     expect(splitAtPath(segmentsOf('/regional/wien')).slug).toBeNull();
+  });
+
+  // Reported from the field: `parkplatz` was read as the type slug and the URL refused.
+  it('takes the feature filters after the type slug off separately', () => {
+    expect(splitAtPath(segmentsOf('/regional/tirol/innsbruck/immobilien/parkplatz/keller/seite-2'))).toEqual({
+      area: ['tirol', 'innsbruck'],
+      slug: 'immobilien',
+      filters: ['parkplatz', 'keller'],
+    });
+  });
+
+  it('only reads feature filters from after the type slug', () => {
+    expect(splitAtPath(segmentsOf('/regional/wien/wien/neubau/wohnung-mieten'))).toEqual({
+      area: ['wien', 'wien', 'neubau'],
+      slug: 'wohnung-mieten',
+      filters: [],
+    });
+  });
+});
+
+describe('#at-paths resolveAtPathFilters()', () => {
+  it('stacks equipment filters rather than replacing one with the next', () => {
+    expect(resolveAtPathFilters(['parkplatz', 'keller', 'aufzug'])).toEqual({
+      equipment: ['parking', 'cellar', 'lift'],
+    });
+  });
+
+  it('translates the filters that are not equipment', () => {
+    expect(resolveAtPathFilters(['neubau', 'provisionsfrei'])).toEqual({
+      newbuilding: true,
+      freeofcourtageonly: true,
+    });
+  });
+
+  // The API reads `fulltext=altbau pool` as both words, so two full text filters narrow together.
+  it('joins full text filters into one search', () => {
+    expect(resolveAtPathFilters(['altbau', 'pool'])).toEqual({ fulltext: 'altbau pool' });
+  });
+
+  it('drops a filter the API cannot express and says so', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    expect(resolveAtPathFilters(['parkplatz', 'moebliert'])).toEqual({ equipment: ['parking'] });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('moebliert'));
+  });
+});
+
+describe('#at-paths mergeAtParams()', () => {
+  it('lets the later value win for a plain parameter', () => {
+    expect(mergeAtParams({ newbuilding: true, price: '-100.0' }, { price: '-200.0' })).toEqual({
+      newbuilding: true,
+      price: '-200.0',
+    });
+  });
+
+  it('accumulates equipment without duplicates', () => {
+    expect(mergeAtParams({ equipment: ['parking'] }, { equipment: ['parking', 'garden'] })).toEqual({
+      equipment: ['parking', 'garden'],
+    });
   });
 });
 
@@ -243,6 +308,47 @@ describe('#at-paths translateAtQueryParams()', () => {
 
     expect(translateAtQueryParams({ primaryPriceTo: 'abc', primaryAreaFrom: '0' })).toEqual({});
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('primaryPriceTo'));
+  });
+
+  describe('outdoor spaces', () => {
+    it('collapses balcony, terrace and loggia onto the one flag the API has', () => {
+      expect(translateAtQueryParams({ outdoorSpaces: ['GARDEN', 'TERRACE', 'BALCONY', 'LOGGIA'] })).toEqual({
+        equipment: ['garden', 'balcony'],
+      });
+    });
+
+    it('reads a comma separated value the same as a split one', () => {
+      expect(translateAtQueryParams({ outdoorSpaces: 'BALCONY,GARDEN' })).toEqual({ equipment: ['balcony', 'garden'] });
+    });
+
+    it('stays quiet when the search is exactly as wide as asked for', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      translateAtQueryParams({ outdoorSpaces: 'GARDEN' });
+      translateAtQueryParams({ outdoorSpaces: ['BALCONY', 'TERRACE', 'LOGGIA'] });
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    // A terrace alone comes back as balcony, terrace or loggia - wider, and said so.
+    it('says so when it has to widen a part of the balcony group', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      expect(translateAtQueryParams({ outdoorSpaces: 'TERRACE' })).toEqual({ equipment: ['balcony'] });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('outdoorSpaces=TERRACE'));
+    });
+
+    it('reports a value it does not know and keeps the rest', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      expect(translateAtQueryParams({ outdoorSpaces: ['ROOFTOP', 'GARDEN'] })).toEqual({ equipment: ['garden'] });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('ROOFTOP'));
+    });
+
+    it('sends nothing when no value was usable', () => {
+      vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      expect(translateAtQueryParams({ outdoorSpaces: 'ROOFTOP' })).toEqual({});
+    });
   });
 
   // A filter the user set and did not get is worth a log line, the same trade the German side's
