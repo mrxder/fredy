@@ -5,6 +5,8 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
+import { up as createSessions } from '../../lib/services/storage/migrations/sql/26.sessions.js';
+import { up as addSessionUserId } from '../../lib/services/storage/migrations/sql/50.session-user-id.js';
 
 /**
  * @fastify/session's default store keeps sessions in a process-local map: they are lost on
@@ -20,13 +22,8 @@ describe('SqliteSessionStore', () => {
 
   beforeEach(async () => {
     db = new Database(':memory:');
-    db.exec(`
-      CREATE TABLE sessions (
-        sid TEXT PRIMARY KEY,
-        data TEXT NOT NULL,
-        expires_at INTEGER NOT NULL
-      );
-    `);
+    createSessions(db);
+    addSessionUserId(db);
 
     vi.resetModules();
     vi.doMock('../../lib/services/storage/SqliteConnection.js', () => ({
@@ -63,6 +60,14 @@ describe('SqliteSessionStore', () => {
     await set('sid-1', sessionFor('user-1'));
     const loaded = await get('sid-1');
     expect(loaded.currentUser).toBe('user-1');
+  });
+
+  it('records the signed-in user on the row, so their sessions can be ended', async () => {
+    await set('sid-1', sessionFor('user-1'));
+    await set('sid-2', { cookie: { originalMaxAge: 60_000 } });
+    const userOf = (sid) => db.prepare('SELECT user_id FROM sessions WHERE sid = ?').get(sid).user_id;
+    expect(userOf('sid-1')).toBe('user-1');
+    expect(userOf('sid-2')).toBeNull();
   });
 
   it('returns null for an unknown session', async () => {
@@ -125,6 +130,48 @@ describe('SqliteSessionStore', () => {
     await set('sid-1', { currentUser: 'user-1' });
     const { expires_at: expiresAt } = db.prepare('SELECT expires_at FROM sessions WHERE sid = ?').get('sid-1');
     expect(expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  describe('compareAndSet', () => {
+    const compareAndSet = (sid, expectedGeneration, session) =>
+      new Promise((resolve, reject) =>
+        store.compareAndSet(sid, expectedGeneration, session, (e) => (e ? reject(e) : resolve())),
+      );
+    const withGeneration = (session, generation) => ({ ...session, __fastifySessionMetadata: { generation } });
+
+    it('replaces a session whose generation matches', async () => {
+      await set('sid-1', withGeneration(sessionFor('user-1'), 'gen-1'));
+      await compareAndSet('sid-1', 'gen-1', withGeneration(sessionFor('user-2'), 'gen-1'));
+      expect((await get('sid-1')).currentUser).toBe('user-2');
+    });
+
+    it('takes the session id as the generation of a row written without one', async () => {
+      await set('sid-1', sessionFor('user-1'));
+      await compareAndSet('sid-1', 'sid-1', sessionFor('user-2'));
+      expect((await get('sid-1')).currentUser).toBe('user-2');
+    });
+
+    it('refuses to bring back a destroyed session', async () => {
+      await set('sid-1', withGeneration(sessionFor('user-1'), 'gen-1'));
+      await destroy('sid-1');
+      await expect(compareAndSet('sid-1', 'gen-1', sessionFor('user-1'))).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await get('sid-1')).toBeNull();
+    });
+
+    it('refuses to overwrite a session that was regenerated meanwhile', async () => {
+      await set('sid-1', withGeneration(sessionFor('user-2'), 'gen-2'));
+      await expect(compareAndSet('sid-1', 'gen-1', sessionFor('user-1'))).rejects.toMatchObject({ code: 'ENOENT' });
+      expect((await get('sid-1')).currentUser).toBe('user-2');
+    });
+
+    it('treats an expired row as missing', async () => {
+      db.prepare('INSERT INTO sessions (sid, data, expires_at) VALUES (?,?,?)').run(
+        'stale',
+        JSON.stringify({ currentUser: 'user-1' }),
+        Date.now() - 1000,
+      );
+      await expect(compareAndSet('stale', 'stale', sessionFor('user-1'))).rejects.toMatchObject({ code: 'ENOENT' });
+    });
   });
 
   describe('sweepExpiredSessions', () => {

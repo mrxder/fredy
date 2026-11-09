@@ -50,9 +50,10 @@ describe('#seloger testsuite()', () => {
       notificationObj.payload.forEach((notify) => {
         expect(notify.id).toBeTypeOf('string');
         expect(notify.title).not.toBe('');
-        // SeLoger lists the adverts of Belles Demeures, its luxury sister portal, among its own, and
-        // their cards link to the sister's site.
-        expect(notify.link).toMatch(/^https:\/\/www\.(seloger|bellesdemeures)\.com\//);
+        // SeLoger lists the adverts of its sister portals among its own - Belles Demeures for luxury
+        // homes, SeLoger bureaux & commerces for commercial property - and their cards link to the
+        // sister's site.
+        expect(notify.link).toMatch(/^https:\/\/www\.(seloger|bellesdemeures|seloger-bureaux-commerces)\.com\//);
         expect(notify.address).not.toBe('');
         if (notify.price != null) expect(notify.price).toContain('€');
       });
@@ -129,7 +130,42 @@ describe('#seloger card', () => {
   });
 
   it('names the town next to the district, which alone would geocode anywhere', () => {
-    expect(normalizeClassified(card('1 860 €')).address).toBe('75003 Archives, Paris');
+    expect(normalizeClassified(card('1 860 €')).address).toBe('Archives, 75003 Paris');
+  });
+
+  /** A live card as SeLoger serves it since autumn 2026, the tracking payload naming the card's town. */
+  const live = (address) => ({ ...card('1 250 000 €'), location: { address }, tracking: { city: address.city } });
+
+  // Comparing the tracking town with the card's dropped it from every card with a district, and
+  // "06400 Californie" geocodes to Le Mans, which the area filter then deletes.
+  it('keeps the town when the tracking payload names the same one as the card', () => {
+    const cannes = live({ city: 'Cannes', zipCode: '06400', district: 'Californie' });
+
+    expect(normalizeClassified(cannes).address).toBe('Californie, 06400 Cannes');
+    expect(normalizeClassified({ ...cannes, tracking: {} }).address).toBe('Californie, 06400 Cannes');
+  });
+
+  // Nominatim knows "Paris 8e Arrondissement" and no "8ème": with it, 8 of 52 live Paris districts
+  // were found at all.
+  it('leaves the arrondissement to the postcode', () => {
+    expect(
+      normalizeClassified(live({ city: 'Paris 8ème arrondissement', zipCode: '75008', district: "Triangle d'Or" }))
+        .address,
+    ).toBe("Triangle d'Or, 75008 Paris");
+    expect(normalizeClassified(live({ city: 'Paris 1er arrondissement', zipCode: '75001' })).address).toBe(
+      '75001 Paris',
+    );
+  });
+
+  it('names a town without a district only once', () => {
+    expect(normalizeClassified(live({ city: 'Cannes', zipCode: '06400' })).address).toBe('06400 Cannes');
+  });
+
+  // "Centre-ville, 06400 Cannes" lands in Corsica, and the town on its own is its centre.
+  it('leaves off a district that is only the town centre', () => {
+    expect(normalizeClassified(live({ city: 'Cannes', zipCode: '06400', district: 'Centre-ville' })).address).toBe(
+      '06400 Cannes',
+    );
   });
 
   // SeLoger quotes a rent per advert either charges comprises or hors charges, and says which on
@@ -185,6 +221,7 @@ describe('#seloger price probe', () => {
 describe('#seloger offline exposé', () => {
   it.runIf(process.env.TEST_MODE === 'offline')('serves no exposé for a link production would not fetch', async () => {
     expect(await fetchExposeHtml(null, 'https://www.bellesdemeures.com/annonces/vente/appartement/1.htm')).toBeNull();
+    expect(await fetchExposeHtml(null, 'https://www.seloger-bureaux-commerces.com/annonce/detail/direct/1')).toBeNull();
     expect(await fetchExposeHtml(null, 'https://www.example.org/expose/1')).toBeNull();
   });
 

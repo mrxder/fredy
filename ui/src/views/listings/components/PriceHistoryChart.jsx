@@ -6,13 +6,7 @@
 import React from 'react';
 import { Line } from 'react-chartjs-2';
 
-import {
-  CHART_COLORS,
-  formatEuro,
-  makeAreaGradient,
-  registerFinanceCharts,
-  withAlpha,
-} from '../../../components/cards/chartTheme.js';
+import { CHART_COLORS, formatEuro, registerFinanceCharts } from '../../../components/cards/chartTheme.js';
 
 registerFinanceCharts();
 
@@ -26,13 +20,18 @@ registerFinanceCharts();
  * Renders nothing below two points. A single dot is not a history, and an axis-less chart showing
  * one dot reads as a rendering failure rather than as "no changes yet".
  *
+ * A plain line in the text colour, no area under it. A price is a figure like the ones above it,
+ * not the page's action, so it does not borrow the red, and a gradient would only add a glow to a
+ * chart whose point is the steps.
+ *
  * @param {Object} props
  * @param {Array<{price: number, observed_at: number}>} props.data Oldest first.
  * @param {string} [props.locale]
  * @param {number} [props.height=120]
+ * @param {string} [props.currency='EUR'] ISO 4217 code of the prices.
  * @returns {React.ReactElement|null}
  */
-export default function PriceHistoryChart({ data = [], locale = 'de-DE', height = 120 }) {
+export default function PriceHistoryChart({ data = [], locale = 'de-DE', height = 120, currency = 'EUR' }) {
   const rows = React.useMemo(() => (Array.isArray(data) ? data : []), [data]);
 
   const chartData = React.useMemo(
@@ -41,20 +40,13 @@ export default function PriceHistoryChart({ data = [], locale = 'de-DE', height 
       datasets: [
         {
           data: rows.map((row) => Number(row.price) || 0),
-          borderColor: CHART_COLORS.ACCENT,
-          borderWidth: 2,
+          borderColor: CHART_COLORS.TEXT,
+          borderWidth: 1.5,
           pointRadius: 2,
           pointHoverRadius: 4,
-          pointBackgroundColor: CHART_COLORS.ACCENT,
+          pointBackgroundColor: CHART_COLORS.TEXT,
           stepped: 'after',
-          fill: true,
-          backgroundColor: (ctx) => {
-            const { chart } = ctx;
-            if (!chart.chartArea) {
-              return withAlpha(CHART_COLORS.ACCENT, 0.15);
-            }
-            return makeAreaGradient(chart.ctx, chart.chartArea, CHART_COLORS.ACCENT, 0.28);
-          },
+          fill: false,
         },
       ],
     }),
@@ -75,26 +67,36 @@ export default function PriceHistoryChart({ data = [], locale = 'de-DE', height 
           display: true,
           beginAtZero: false,
           grid: { color: CHART_COLORS.GRID },
+          border: { display: false },
           ticks: {
             color: CHART_COLORS.MUTED,
+            font: { family: CHART_COLORS.FONT_UI, size: 12 },
             maxTicksLimit: 4,
-            callback: (value) => formatEuro(value, locale),
+            callback: (value) => formatEuro(value, locale, currency),
           },
         },
       },
       plugins: {
         legend: { display: false },
+        // The same tooltip as the dashboard's trend chart: a raised surface with a hairline.
         tooltip: {
           displayColors: false,
+          backgroundColor: CHART_COLORS.ELEVATED,
+          borderColor: CHART_COLORS.GRID_BRIGHT,
+          borderWidth: 1,
+          titleColor: CHART_COLORS.MUTED,
+          bodyColor: CHART_COLORS.TEXT,
+          titleFont: { family: CHART_COLORS.FONT_UI, size: 12, weight: '500' },
+          bodyFont: { family: CHART_COLORS.FONT_UI, size: 13, weight: '600' },
           callbacks: {
             title: (items) => new Date(Number(items[0].label)).toLocaleDateString(locale),
-            label: (ctx) => formatEuro(ctx.parsed.y, locale),
+            label: (ctx) => formatEuro(ctx.parsed.y, locale, currency),
           },
         },
       },
       interaction: { mode: 'index', intersect: false },
     }),
-    [locale],
+    [locale, currency],
   );
 
   if (rows.length < 2) {

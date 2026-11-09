@@ -7,18 +7,18 @@ platform into Fredy.
 > Always make sure the search results are sorted by **date**, so Fredy picks up the newest listings
 > first.
 
-## The 30 built-in providers
+## The 32 built-in providers
 
 **🇩🇪 Germany**
 
-| | | |
-|---|---|---|
-| 1a Immobilien | Immo Südwest Presse | Neubau Kompass |
-| Deutsche Wohnen | Immobilien.de | OhneMakler |
-| Engel & Völkers | Immoscout | Regionalimmobilien24 |
-| IMAXX | Immowelt | Schwarzes Brett Bremen |
-| InBerlinWohnen | Kleinanzeigen | Sparkasse Immobilien |
-| McMakler | Wg gesucht | |
+|                 |                     |                        |
+| --------------- | ------------------- | ---------------------- |
+| 1a Immobilien   | Immo Südwest Presse | Neubau Kompass         |
+| Deutsche Wohnen | Immobilien.de       | OhneMakler             |
+| Engel & Völkers | Immoscout           | Regionalimmobilien24   |
+| IMAXX           | Immowelt            | Schwarzes Brett Bremen |
+| InBerlinWohnen  | Kleinanzeigen       | Sparkasse Immobilien   |
+| McMakler        | Wg gesucht          | ZVG-Portal             |
 
 **🇩🇪 Germany · 🇦🇹 Austria · 🇨🇭 Switzerland** · BETTERHOMES
 **🇦🇹 Austria** · willhaben · Immoscout Österreich · immo.tt.com
@@ -26,6 +26,7 @@ platform into Fredy.
 **🇪🇸 Spain · 🇮🇹 Italy · 🇵🇹 Portugal** · idealista
 **🇮🇹 Italy** · Subito · Tecnocasa · Tecnorete · Casa.it
 **🇫🇷 France** · leboncoin · SeLoger · Bien'ici
+**🇵🇱 Poland** · Otodom
 
 If you run a portal Fredy does not cover yet, contributions are very welcome, see
 [CONTRIBUTING.md](../CONTRIBUTING.md).
@@ -117,6 +118,29 @@ translated into API requests use the job's browser; the fallback reads up to twe
 when a page provides no valid results. See the
 [provider documentation](../reverse-engineered-casa.md) for supported endpoints and filters.
 
+## ZVG-Portal
+
+The German justice portal (`zvg-portal.de`) that announces forced-sale auctions (Zwangsversteigerungen). Houses and plots
+come up here that the commercial portals never list. The portal has no GET search - a search is a form POST - so the url
+you paste only _describes_ the search and Fredy sends the form itself:
+
+```
+https://www.zvg-portal.de/index.php?button=Suchen&land_abk=sh&obj_arr=3,15,16&plz_prefix=22,25
+```
+
+- `land_abk` - state code, required, lowercase (`sh`, `hh`, `ni`, `nw`, ...). A wrong one makes the portal answer a bare `error`.
+- `obj_arr` - comma separated object types, as the portal numbers them: 1 Reihenhaus, 2 Doppelhaushälfte, 3 Einfamilienhaus,
+  15 Baugrundstück, 16 unbebautes Grundstück. Leave it out and every type of the state comes back, flats and garages included.
+- `plz_prefix` - not a form field: keeps only auctions whose address has a postcode starting with one of these (`22,25`), for a
+  region inside a state.
+- Any other field of the portal's search form (`plz`, `ort`, `str`, `vtermin`, ...) is sent unchanged. The portal ignores a value in
+  the wrong format, for example a date must be ISO (`2027-03-01`).
+
+The price is the court's Verkehrswert (appraised value), not an asking price; a bid can end above or below it. The court enters 1 EUR
+while it has not set one, which Fredy leaves empty. The portal's own detail page only answers a request that comes from the portal
+itself, so the link of a listing opens the search page (find the auction by its Aktenzeichen, which is in the description) and Fredy
+reads the detail page for the court's description, the living area and the place of the auction.
+
 ## BETTERHOMES
 
 One brokerage on three domains - `betterhomes.de`, `betterhomes.at` and `betterhomes.ch` - and a
@@ -174,8 +198,8 @@ is: from inside a browser session, since SeLoger - like Immowelt - answers any p
 DataDome wall, whether the advert is still there or not. The alive-checker and the price tracker
 start one browser per run for it, and only when a SeLoger or Immowelt listing is due.
 
-**Rents are stored the way the card states them.** SeLoger quotes each rent either *charges
-comprises* ("cc") or *hors charges* ("hc"), advert by advert, and its result cards give no charges
+**Rents are stored the way the card states them.** SeLoger quotes each rent either _charges
+comprises_ ("cc") or _hors charges_ ("hc"), advert by advert, and its result cards give no charges
 figure to take a "cc" rent down to the one without them. So a SeLoger rent is sometimes with the
 charges and sometimes without, while leboncoin and Bien'ici store it without them wherever the
 advert states them. Fredy records which one each stored rent is, and compares rents on the basis
@@ -192,15 +216,33 @@ request per run, plus one place lookup per place in the url once a day. Paste th
 property types and room counts work, and so does every filter the site writes into the query string;
 one Fredy does not know stops the job and names itself instead of widening your search.
 
-Rents are stored without charges: Bien'ici quotes them *charges comprises* and states the charges
+Rents are stored without charges: Bien'ici quotes them _charges comprises_ and states the charges
 next to them, so Fredy subtracts them, or takes the advertiser's own figure where one is given. On a
-rent-controlled advert that figure is the capped base rent, and the *complément de loyer* on top of
+rent-controlled advert that figure is the capped base rent, and the _complément de loyer_ on top of
 it is added back, since the tenant pays it every month like the rest.
 
 Not supported: an area drawn on the map, a circle and a travel-time area. Bien'ici keeps those on its
 own servers and the url carries nothing but an id, so the job stops and says so - search the town
 and narrow it down with Fredy's own map area filter instead. A place Bien'ici no longer knows stops
 the job too, rather than being searched as whatever its place lookup guesses instead.
+
+## Otodom
+
+House-sale searches anywhere in Poland, for example:
+
+```
+https://www.otodom.pl/pl/wyniki/sprzedaz/dom/malopolskie/krakow/krakow/krakow?ownerTypeSingleSelect=ALL
+```
+
+Fredy reads the page's embedded JSON over plain HTTP, newest first, at most five pages per run. If more
+than five pages of new adverts arrive between runs, narrow the search or shorten the interval.
+
+Prices stay in PLN; adverts in other currencies and development groups without a single price are
+skipped. A price change does not announce an advert again. Rentals, flats, detail enrichment, adding
+an advert by URL, activity checks and price tracking are not supported yet.
+
+Otodom sits behind CloudFront: a blocked request fails the job rather than looking like an empty
+search. EUR financing does not score PLN listings; see [Currencies](#currencies).
 
 ## Countries and the map
 
@@ -219,6 +261,19 @@ export const metaInformation = {
 
 Addresses are then geocoded in those countries, and the map opens on them so you can draw a search
 area there. A provider spanning several is fine: `countries: ['de', 'at', 'ch']`.
+
+## Currencies
+
+Providers declare `metaInformation.currency`, with `EUR` as the default. Flatfox uses `CHF`;
+BETTERHOMES prices in EUR and lists its Swiss site under `currencyByHost`. Each listing stores its
+currency when it is found. Prices stay in their original currency throughout listing views,
+notifications, price history and MCP. Fredy does not convert between currencies.
+
+A dashboard covering several currencies hides its monetary medians, and price ranges need a
+selection with one currency. A job can only be saved with a price ceiling if its sources share a
+currency. An older job that mixes them keeps filtering with its ceiling until it is next edited,
+and then needs the ceiling cleared to save. The finance calculator retains its EUR and German
+purchase-cost assumptions: it does not score non-EUR listings.
 
 ## 🛡️ Bot detection & proxies
 
@@ -255,14 +310,14 @@ affected.
 Residential proxies are a paid service (usually billed per GB, Fredy's traffic is small). Well-known
 providers offering German residential IPs:
 
-| Provider | Notes |
-|---|---|
-| [IPRoyal](https://iproyal.com) | Pay-as-you-go, no monthly minimum, good for low volume |
-| [Webshare](https://www.webshare.io) | Cheap entry tier, has a small free plan to test with |
-| [Decodo (formerly Smartproxy)](https://decodo.com) | Easy setup, country/city targeting |
-| [SOAX](https://soax.com) | Residential + mobile, fine-grained geo-targeting |
-| [Bright Data](https://brightdata.com) | Largest pool, most features, higher complexity/price |
-| [Oxylabs](https://oxylabs.io) | Enterprise-grade, larger plans |
+| Provider                                           | Notes                                                  |
+| -------------------------------------------------- | ------------------------------------------------------ |
+| [IPRoyal](https://iproyal.com)                     | Pay-as-you-go, no monthly minimum, good for low volume |
+| [Webshare](https://www.webshare.io)                | Cheap entry tier, has a small free plan to test with   |
+| [Decodo (formerly Smartproxy)](https://decodo.com) | Easy setup, country/city targeting                     |
+| [SOAX](https://soax.com)                           | Residential + mobile, fine-grained geo-targeting       |
+| [Bright Data](https://brightdata.com)              | Largest pool, most features, higher complexity/price   |
+| [Oxylabs](https://oxylabs.io)                      | Enterprise-grade, larger plans                         |
 
 This is not an endorsement, pick whatever fits your budget. For low-volume use like Fredy, a
 pay-as-you-go plan (e.g. IPRoyal) or a cheap entry tier (e.g. Webshare) is usually plenty. Select

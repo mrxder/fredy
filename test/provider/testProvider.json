@@ -1,4 +1,8 @@
 {
+  "otodom": {
+    "url": "https://www.otodom.pl/pl/wyniki/sprzedaz/dom/malopolskie/krakow/krakow/krakow?ownerTypeSingleSelect=ALL",
+    "enabled": true
+  },
   "einsAImmobilien": {
     "url": "https://www.1a-immobilienmarkt.de/suchen/duesseldorf/wohnung-kaufen.html?search=yes&cfid=98b39c7e-b403-4764-8f3c-57bf590923d0&data_hash=f46f89548257740094dd708996adcd68&sort_type=newest",
     "enabled": true,
@@ -79,6 +83,10 @@
   },
   "immoTt": {
     "url": "https://immo.tt.com/kaufobjekt/wohnung/tirol/innsbruck-stadt?f%5Bprice%23t%7Cprice_t%40g%5D=450000&f%5Bprice%23v%7Cprice_t%40g%5D=false&f%5Bno_of_rooms%40f%5D=2&f%5Bliving%40f%5D=50",
+    "enabled": true
+  },
+  "zvgPortal": {
+    "url": "https://www.zvg-portal.de/index.php?button=Suchen&land_abk=sh&obj_arr=3,15,16",
     "enabled": true
   },
   "flatfox": {

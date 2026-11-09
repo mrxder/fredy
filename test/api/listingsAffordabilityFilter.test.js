@@ -24,6 +24,7 @@ vi.mock('../../lib/services/storage/watchListStorage.js', () => ({
   ensureWatch: vi.fn(),
 }));
 vi.mock('../../lib/services/storage/jobStorage.js', () => ({ getJob: vi.fn(() => null) }));
+vi.mock('../../lib/services/storage/listingMediaStorage.js', () => ({ getListingGallery: vi.fn(() => []) }));
 vi.mock('../../lib/services/storage/settingsStorage.js', () => ({
   getSettings: vi.fn(async () => ({})),
   getUserSettings: vi.fn(() => ({})),
@@ -73,6 +74,17 @@ beforeEach(() => {
 });
 
 describe('GET /table affordability filter', () => {
+  it('carries PLN through table and detail responses without an EUR verdict', async () => {
+    const listing = { id: 'pl', provider: 'polish', currency: 'PLN', price: 1050000, dealType: 'buy' };
+    queryListings.mockReturnValue({ totalNumber: 1, page: 1, result: [listing] });
+    getListingById.mockReturnValue(listing);
+    const app = await buildApp();
+    const table = (await app.inject({ method: 'GET', url: '/table' })).json();
+    const detail = (await app.inject({ method: 'GET', url: '/pl' })).json();
+    expect(table.result[0]).toMatchObject({ currency: 'PLN', affordabilityVerdict: null });
+    expect(detail).toMatchObject({ currency: 'PLN', affordabilityVerdict: null });
+    await app.close();
+  });
   it('translates "affordable" into a buy price band capped at the 35 % ceiling', async () => {
     const app = await buildApp();
     const response = await app.inject({ method: 'GET', url: '/table?affordabilityFilter=affordable' });
@@ -284,6 +296,7 @@ describe('verdicts and the rent basis', () => {
   const rentRow = (id, chargesIncluded, extra = {}) => ({
     id,
     price: 1100,
+    currency: 'EUR',
     dealType: 'rent',
     charges_included: chargesIncluded,
     ...extra,

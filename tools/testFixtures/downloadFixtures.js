@@ -342,6 +342,34 @@ async function downloadBetterhomesFixtures(url) {
 }
 
 /**
+ * The ZVG-Portal's result table. A search is a form POST, so the fixture is the table of that answer, cut out of the page
+ * (the same cut the provider's parser reads).
+ *
+ * @param {string} url the search url from testProvider.json
+ * @returns {Promise<void>}
+ */
+async function downloadZvgPortalFixtures(url) {
+  console.log('\nDownloading zvgPortal...');
+  const { parseSearchUrl } = await import('../../lib/provider/zvgPortal.js');
+  const { body } = parseSearchUrl(url);
+  const response = await fetch('https://www.zvg-portal.de/index.php?button=Suchen&all=1', { method: 'POST', body });
+  if (!response.ok) {
+    console.warn(`  Failed to download zvgPortal: ${response.statusText}`);
+    return;
+  }
+  const html = await response.text();
+  const start = html.indexOf('<table border=0>');
+  const end = html.indexOf('<!--Zwangsversteigerungen Ende-->');
+  if (start < 0 || end < 0) {
+    console.warn('  zvgPortal page carried no result table - skipping fixture');
+    return;
+  }
+  const trimmed = `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>zvg-portal fixture</title></head><body>\n${html.slice(start, end)}\n</body></html>\n`;
+  await writeFile(path.join(FIXTURES_DIR, 'zvgPortal.html'), trimmed, 'utf-8');
+  console.log('  Saved zvgPortal.html');
+}
+
+/**
  * Flatfox answers a search in two requests, so it needs two fixtures.
  *
  * The pins carry the primary keys of everything matching the search; the second call hydrates those
@@ -922,6 +950,50 @@ export async function clearFixtures(fixturesDir) {
   return files.length;
 }
 
+/**
+ * Record two Otodom pages; unrelated bootstrap data and contact details are omitted.
+ * @param {string} url
+ * @returns {Promise<void>}
+ */
+async function downloadOtodomFixtures(url) {
+  const { parseSearchPage } = await import('../../lib/provider/otodom.js');
+  const searchUrl = new URL(url);
+  searchUrl.searchParams.set('by', 'LATEST');
+  searchUrl.searchParams.set('direction', 'DESC');
+  for (let page = 1; page <= 2; page++) {
+    searchUrl.searchParams.set('page', String(page));
+    const response = await fetch(searchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pl-PL,pl;q=0.9' },
+      signal: AbortSignal.timeout(30_000),
+      redirect: 'error',
+    });
+    if (!response.ok) throw new Error(`Otodom fixture failed: ${response.status} ${response.statusText}`);
+    const search = parseSearchPage(await response.text());
+    const fields = [
+      'id',
+      'title',
+      'slug',
+      'images',
+      'areaInSquareMeters',
+      'dateCreated',
+      'location',
+      'roomsNumber',
+      'totalPrice',
+      'hidePrice',
+      'shortDescription',
+      'investmentUnitsNumber',
+      'investmentUnitsAreaInSquareMeters',
+    ];
+    search.items = search.items.map((item) =>
+      Object.fromEntries(fields.filter((key) => key in item).map((key) => [key, item[key]])),
+    );
+    search.pagination = { ...search.pagination, totalPages: 2 };
+    const data = JSON.stringify({ props: { pageProps: { data: { searchAds: search } } } }).replaceAll('<', '\\u003c');
+    const html = `<!doctype html>\n<!-- Recorded from ${searchUrl}; pagination shortened to two pages for offline tests. -->\n<script id="__NEXT_DATA__" type="application/json">${data}</script>\n`;
+    await writeFile(path.join(FIXTURES_DIR, page === 1 ? 'otodom.html' : 'otodom_page2.html'), html);
+  }
+}
+
 async function main() {
   await mkdir(FIXTURES_DIR, { recursive: true });
 
@@ -967,8 +1039,14 @@ async function main() {
       case 'leboncoin':
         await downloadLeboncoinFixtures(runConfig, launchBrowser, closeBrowser);
         break;
+      case 'otodom':
+        await downloadOtodomFixtures(runConfig.url);
+        break;
       case 'willhaben':
         await downloadWillhabenFixtures(runConfig.url);
+        break;
+      case 'zvgPortal':
+        await downloadZvgPortalFixtures(runConfig.url);
         break;
       case 'flatfox':
         await downloadFlatfoxFixtures(runConfig.url);

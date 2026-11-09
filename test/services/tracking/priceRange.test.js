@@ -22,6 +22,11 @@ const configOf = (id) => providers.find((provider) => provider.metaInformation.i
  */
 const RECORDED_SEARCHES = [
   [
+    'otodom',
+    'https://www.otodom.pl/pl/wyniki/sprzedaz/dom/krakow?priceMin=500000&priceMax=2000000',
+    { min: 500000, max: 2000000 },
+  ],
+  [
     'deutscheWohnen',
     'https://www.deutsche-wohnen.com/mieten/mietangebote?rentType=miete&city=Berlin&immoType=wohnung&priceMin=500&priceMax=1000&minRooms=Beliebig&balcony=egal',
     { min: 500, max: 1000 },
@@ -170,6 +175,7 @@ const NO_RANGE_IN_URL = [
   ['regionalimmobilien24', 'https://www.regionalimmobilien24.de/rostock/rostock/kaufen/haus/-/-/-/?rd=5'],
   ['wgGesucht', 'https://www.wg-gesucht.de/wg-zimmer-in-Duesseldorf.30.0.1.0.html'],
   ['willhaben', 'https://www.willhaben.at/iad/immobilien/mietwohnungen/wien'],
+  ['zvgPortal', 'https://www.zvg-portal.de/index.php?button=Suchen&land_abk=sh&obj_arr=3,15,16'],
 ];
 
 const IMMOSCOUT = 'https://www.immobilienscout24.de/Suche/de/nordrhein-westfalen/duesseldorf';

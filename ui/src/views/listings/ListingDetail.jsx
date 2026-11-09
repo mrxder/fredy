@@ -6,14 +6,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useSelector, useActions } from '../../services/state/store.js';
-import { Banner, Button, Image, Space, Spin, Toast, Typography } from '@douyinfe/semi-ui-19';
-import { IconMaximize } from '@douyinfe/semi-icons';
+import { Banner, Button, Space, Spin, Toast, Typography } from '@douyinfe/semi-ui-19';
 
 import maplibregl from '../../components/map/maplibre.js';
 import { MARKER_COLORS } from '../../components/map/markerColors.js';
 import { useProviderCountries } from '../../hooks/useProviderCountries.js';
 import { PHONE_BREAKPOINT, useScreenWidth } from '../../hooks/screenWidth.js';
-import no_image from '../../assets/no_image.png';
 import { getBoundsFromCoords } from './mapUtils.js';
 import { escapeHtml } from './listingPopupContent.jsx';
 import { applyRouteLayers, buildRouteData, placeTargets } from './detailMapLayers.js';
@@ -25,6 +23,7 @@ import ApplicationModal from './components/ApplicationModal.jsx';
 
 import IconEuro from '../../components/icons/IconEuro.jsx';
 import ScamPanel from './components/ScamPanel.jsx';
+import ListingPictures from './components/ListingPictures.jsx';
 import ListingFinanceCard from './components/ListingFinanceCard.jsx';
 import NearbyStops from '../../components/transit/NearbyStops.jsx';
 import ConnectivityCard from '../../components/connectivity/ConnectivityCard.jsx';
@@ -109,7 +108,6 @@ export default function ListingDetail() {
   const [loading, setLoading] = useState(true);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [applicationVisible, setApplicationVisible] = useState(false);
-  const [imagePreview, setImagePreview] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
   const [priceHistory, setPriceHistory] = useState([]);
@@ -136,9 +134,24 @@ export default function ListingDetail() {
   // to comes from this listing's own travel times, which is where the sweep recorded it.
   const homeAddresses = useMemo(() => [...savedAddresses, ...placeTargets(routeTimes)], [savedAddresses, routeTimes]);
 
+  // Keyed on what the times say, as TravelTimes does: every action on this page (watch, status,
+  // note) reloads the listing and hands over a new array with the same times. Reset on that, the
+  // route TravelTimes had refined was thrown away and the map redrawn without it.
+  const listingTravelTimesKey = JSON.stringify(listing?.travelTimes ?? []);
   useEffect(() => {
     setRouteTimes(listing?.travelTimes ?? []);
-  }, [listing?.id, listing?.travelTimes]);
+  }, [listing?.id, listingTravelTimesKey]);
+
+  // What the map draws of the listing, by value. The reload after every action is a new object,
+  // and the map effect below used to redraw every marker and move the camera back to the overview
+  // for it, from wherever the user had zoomed to.
+  const mapListing = useMemo(
+    () =>
+      listing == null
+        ? null
+        : { id: listing.id, latitude: listing.latitude, longitude: listing.longitude, address: listing.address },
+    [listing?.id, listing?.latitude, listing?.longitude, listing?.address],
+  );
 
   useEffect(() => {
     document.querySelector('.app__content')?.scrollTo({ top: 0 });
@@ -241,7 +254,8 @@ export default function ListingDetail() {
   // between them. The map itself is no longer created or destroyed here, so this only ever adds and
   // removes its own markers.
   useEffect(() => {
-    if (!mapReady || !map.current || !listing || !hasGeo) return undefined;
+    if (!mapReady || !map.current || !mapListing || !hasGeo) return undefined;
+    const listing = mapListing;
 
     const mapInstance = map.current;
     const markers = [];
@@ -252,7 +266,7 @@ export default function ListingDetail() {
       new maplibregl.Marker({ color: MARKER_COLORS.listing })
         .setLngLat([listing.longitude, listing.latitude])
         .setPopup(
-          new maplibregl.Popup({ offset: 25 }).setHTML(
+          new maplibregl.Popup({ offset: 25, className: 'listing-detail-popup' }).setHTML(
             `<h4>${t('listing.detail.mapPopupListingLocation')}</h4><p>${escapeHtml(listing.address ?? '')}</p>`,
           ),
         )
@@ -264,7 +278,7 @@ export default function ListingDetail() {
         new maplibregl.Marker({ color: MARKER_COLORS.home })
           .setLngLat([home.coords.lng, home.coords.lat])
           .setPopup(
-            new maplibregl.Popup({ offset: 25 }).setHTML(
+            new maplibregl.Popup({ offset: 25, className: 'listing-detail-popup' }).setHTML(
               `<h4>${escapeHtml(home.label || t('listing.detail.mapPopupHomeAddress'))}</h4><p>${escapeHtml(home.address ?? '')}</p>`,
             ),
           )
@@ -296,7 +310,7 @@ export default function ListingDetail() {
       markers.forEach((marker) => marker.remove());
       mapInstance.off('styledata', drawRoute);
     };
-  }, [mapReady, listing, homeAddresses, routeTimes, routeMode, hasGeo, t]);
+  }, [mapReady, mapListing, homeAddresses, routeTimes, routeMode, hasGeo, t]);
 
   const confirmDeletion = async (hardDelete, remember) => {
     try {
@@ -487,7 +501,9 @@ export default function ListingDetail() {
   if (!listing) return null;
 
   const isRental = listing.dealType === 'rent';
-  const financeIncomplete = !(isRental ? rentComplete : buyComplete) && listing.price != null;
+  // Not offered outside the euro: the calculator would take the listing's price for euros.
+  const financeIncomplete =
+    listing.currency === 'EUR' && !(isRental ? rentComplete : buyComplete) && listing.price != null;
 
   return (
     <div className={`listing-detail${phone ? ' listing-detail--phone' : ''}`}>
@@ -525,35 +541,7 @@ export default function ListingDetail() {
 
       <div className="listing-detail__grid">
         <div className="listing-detail__main">
-          <section className="listing-detail__media listing-detail__sec--media">
-            <div className={`listing-detail__image${!listing.image_url ? ' listing-detail__image--placeholder' : ''}`}>
-              <Image
-                src={listing.image_url ?? no_image}
-                fallback={<img src={no_image} alt={t('listing.detail.noImageAlt')} />}
-                alt={listing.title || t('listing.detail.defaultTitle')}
-                style={{ width: '100%', height: '100%' }}
-                preview={listing.image_url ? { visible: imagePreview, onVisibleChange: setImagePreview } : false}
-              />
-              {/* A plain button rather than a Semi one: it sits on a photograph, so its colours
-                  are the scrim's and not the theme's, and fighting a component's own palette with
-                  `!important` to get there is the worse trade. */}
-              {listing.image_url && (
-                <button
-                  type="button"
-                  className="listing-detail__image-expand"
-                  aria-label={t('listing.detail.expandImage')}
-                  onClick={() => setImagePreview(true)}
-                >
-                  <IconMaximize aria-hidden="true" />
-                </button>
-              )}
-            </div>
-            {!listing.image_url && (
-              <Text type="tertiary" size="small" className="listing-detail__image-note">
-                {t('listing.detail.noImageAlt')}
-              </Text>
-            )}
-          </section>
+          <ListingPictures listing={listing} />
 
           <div className="listing-detail__sec--description">
             <PhoneCollapse

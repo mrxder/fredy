@@ -26,6 +26,7 @@ describe('storeListings id propagation', () => {
         provider TEXT,
         job_id TEXT,
         price REAL,
+        currency TEXT NOT NULL DEFAULT 'EUR',
         charges_included INTEGER,
         charges REAL,
         size REAL,
@@ -47,6 +48,7 @@ describe('storeListings id propagation', () => {
         notes TEXT,
         status TEXT,
         price_per_sqm REAL,
+        added_manually INTEGER NOT NULL DEFAULT 0,
         UNIQUE (job_id, hash)
       );
     `);
@@ -71,6 +73,7 @@ describe('storeListings id propagation', () => {
   const listing = (hash, overrides = {}) => ({
     id: hash,
     price: 1000,
+    currency: 'EUR',
     size: 60,
     rooms: 2,
     title: `Flat ${hash}`,
@@ -133,6 +136,37 @@ describe('storeListings id propagation', () => {
 
     expect(db.prepare('SELECT COUNT(*) AS c FROM listings').get().c).toBe(2);
     expect(forJobOne[0].id).not.toBe(forJobTwo[0].id);
+  });
+
+  it('marks a listing added by hand, and a later job run finding the same advert keeps the mark', () => {
+    const added = [listing('by-hand', { addedManually: true })];
+    listingsStorage.storeListings('job-1', 'immoscout', added);
+    listingsStorage.storeListings('job-1', 'immoscout', [listing('by-hand')]);
+
+    expect(db.prepare('SELECT COUNT(*) AS c FROM listings').get().c).toBe(1);
+    expect(db.prepare('SELECT added_manually FROM listings WHERE id = ?').get(added[0].id).added_manually).toBe(1);
+  });
+
+  it('does not mark what a job run found', () => {
+    const found = [listing('found')];
+    listingsStorage.storeListings('job-1', 'immoscout', found);
+
+    expect(db.prepare('SELECT added_manually FROM listings WHERE id = ?').get(found[0].id).added_manually).toBe(0);
+  });
+
+  it('stores the currency the listing carries', () => {
+    const listings = [listing('francs', { currency: 'CHF' })];
+    listingsStorage.storeListings('job-1', 'flatfox', listings);
+
+    expect(db.prepare('SELECT currency FROM listings WHERE id = ?').get(listings[0].id).currency).toBe('CHF');
+  });
+
+  // Defaulting here is how a franc price ends up stored as euros, with nothing to show for it.
+  it('refuses a listing that does not say its currency', () => {
+    expect(() => listingsStorage.storeListings('job-1', 'flatfox', [listing('x', { currency: undefined })])).toThrow(
+      /NOT NULL/,
+    );
+    expect(db.prepare('SELECT COUNT(1) AS cnt FROM listings').get().cnt).toBe(0);
   });
 
   it('strips parenthesised address suffixes', () => {

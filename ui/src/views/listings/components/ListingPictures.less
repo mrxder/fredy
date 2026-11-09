@@ -1,0 +1,109 @@
+/*
+ * Copyright (c) 2026 by Christian Kellner.
+ * Licensed under Apache-2.0 with Commons Clause and Attribution/Naming Clause
+ */
+
+@import '../../../tokens.less';
+
+/* The large picture keeps its `listing-detail__image` styles in ListingDetail.less; only what the
+   gallery adds around it lives here. */
+.listingPictures {
+  /* Sits on a photograph, like the expand button opposite it, so it takes the same floating
+     surface the map's panels and the grid's age pill use. */
+  &__count {
+    position: absolute;
+    left: @space-3;
+    bottom: @space-3;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 @space-3;
+    border-radius: @radius-pill;
+    font-size: @text-xs;
+    font-weight: @weight-medium;
+    color: @color-map-panel-strong;
+    background: @color-map-panel;
+    pointer-events: none;
+  }
+
+  &__strip {
+    display: flex;
+    gap: @space-2;
+    margin-top: @space-3;
+    padding-bottom: @space-1;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* The current picture is marked in the text colour, the way everything picked is; the others
+     sit a step back until pointed at. */
+  &__thumb {
+    position: relative;
+    flex: 0 0 auto;
+    width: 96px;
+    height: 64px;
+    padding: 0;
+    overflow: hidden;
+    border: 2px solid transparent;
+    border-radius: @radius-chip;
+    background: @color-fill-subtle;
+    cursor: pointer;
+    scroll-snap-align: start;
+    opacity: 0.7;
+    transition:
+      opacity @transition-fast,
+      border-color @transition-fast;
+
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    &:hover,
+    &:focus-visible {
+      opacity: 1;
+    }
+
+    &--active {
+      opacity: 1;
+      border-color: @color-text;
+    }
+
+    @media (max-width: 768px) {
+      width: 72px;
+      height: 48px;
+    }
+  }
+
+  /* On the thumbnail's photograph: the floating surface again, turned with the theme. */
+  &__badge {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 1px @space-1;
+    font-size: @text-xs;
+    line-height: 1.4;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: @color-map-panel-strong;
+    background: @color-map-panel;
+  }
+}
+
+/* The drawn house, filling the frame it stands in: the large picture's and a thumbnail's alike. */
+.listingPictures__placeholder,
+.listingPictures__thumbPhoto {
+  width: 100%;
+  height: 100%;
+}
+
+.listingPictures__placeholder.listingPhoto--empty {
+  font-size: 48px;
+}

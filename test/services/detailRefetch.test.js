@@ -202,6 +202,30 @@ describe('refetchListingDetails', () => {
     expect(state.closed).toBe(1);
   });
 
+  it('starts no browser for a provider that reads its details from an API', async () => {
+    // The launch was memoized as lazy and then awaited unconditionally, so the usual immoscout
+    // press of the button still paid for a Chromium start.
+    let handed = 'unset';
+    state.providers = [
+      {
+        ...providerModule('testportal', null),
+        config: {
+          needsBrowser: false,
+          fetchDetails: async (listing, browser) => {
+            handed = browser;
+            return { ...listing, description: 'From the API' };
+          },
+        },
+      },
+    ];
+
+    const result = await refetchListingDetails(row);
+
+    expect(result.status).toBe('updated');
+    expect(handed).toBeUndefined();
+    expect(state.launched).toBe(0);
+  });
+
   it('leaves an address the user placed by hand alone', async () => {
     // The portal's string is what they were correcting. Writing it back would undo the correction
     // on the next press of the button.
@@ -248,6 +272,29 @@ describe('refetchListingDetails', () => {
     const result = await refetchListingDetails(row);
 
     expect(Object.keys(result.fields)).toEqual(['description']);
+  });
+
+  it('hands back the gallery the detail page carried, leaving the fields to say what changed', async () => {
+    const images = [{ url: 'https://pics.test/1.jpg' }, { url: 'https://pics.test/plan.jpg', floorPlan: true }];
+    state.providers = [providerModule('testportal', async (listing) => ({ ...listing, images }))];
+
+    const result = await refetchListingDetails(row);
+
+    // Whether the gallery is new is for storage to say; the text did not change.
+    expect(result.status).toBe('unchanged');
+    expect(result.images).toEqual(images);
+  });
+
+  it('hands back no gallery for a page without one, or one that failed', async () => {
+    state.providers = [providerModule('testportal', async (listing) => listing)];
+    expect((await refetchListingDetails(row)).images).toEqual([]);
+
+    state.providers = [
+      providerModule('testportal', async () => {
+        throw new Error('blocked');
+      }),
+    ];
+    expect((await refetchListingDetails(row)).images).toEqual([]);
   });
 });
 

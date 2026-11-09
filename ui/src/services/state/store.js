@@ -97,6 +97,20 @@ const loadingTracker = (config) => (set, get, api) => {
 };
 
 // Create the Zustand store with slices and actions
+/**
+ * The newest request of each list, by name. A page, filter or job switched quickly can send two
+ * requests whose answers arrive in the wrong order (a slow mobile link, a proxy); without this the
+ * older answer was written last, and the list showed page 2 under a pagination that said page 3.
+ * @type {Record<string, number>}
+ */
+const latestTicket = {};
+
+/** @param {string} key @returns {number} */
+const nextTicket = (key) => (latestTicket[key] = (latestTicket[key] ?? 0) + 1);
+
+/** @param {string} key @param {number} ticket @returns {boolean} */
+const isLatest = (key, ticket) => latestTicket[key] === ticket;
+
 export const useFredyState = create(
   logger(
     loadingTracker((set) => {
@@ -279,7 +293,9 @@ export const useFredyState = create(
                 sortdir,
                 ...filter,
               });
+              const ticket = nextTicket('jobsData');
               const response = await xhrGet(`/api/jobs/data?${qryString}`);
+              if (!isLatest('jobsData', ticket)) return;
               set((state) => ({
                 jobsData: { ...state.jobsData, ...response.json },
               }));
@@ -305,6 +321,23 @@ export const useFredyState = create(
               );
               return { jobsData: { ...state.jobsData, jobs: Object.freeze(updated), result: Object.freeze(result) } };
             });
+          },
+          async addJobBlacklistWord(jobId, word) {
+            const response = await xhrPost(`/api/jobs/${jobId}/blacklist`, { word });
+            if (response.status === 200) {
+              set((state) => {
+                const updateList = (list) =>
+                  (list || []).map((j) => (j.id === jobId ? { ...j, blacklist: response.json.blacklist } : j));
+                return {
+                  jobsData: {
+                    ...state.jobsData,
+                    jobs: Object.freeze(updateList(state.jobsData.jobs)),
+                    result: Object.freeze(updateList(state.jobsData.result)),
+                  },
+                };
+              });
+            }
+            return response.json;
           },
         },
         user: {
@@ -337,8 +370,13 @@ export const useFredyState = create(
            * Drops the cached current user so the app falls back to the login screen. Triggered when a
            * request returns 401 (expired session) so the UI recovers instead of staying stuck.
            */
+          // Everything the account loaded goes, not just who it was: a session that ran out left the
+          // jobs, listings, figures and addresses of the previous account in the store, and the next
+          // account to sign in on that tab saw them until its own answers came in. What the login
+          // screen itself needs (demo mode, providers, instance settings) stays.
           async resetCurrentUser() {
-            set((state) => ({ user: { ...state.user, currentUser: {} } }));
+            const { demoMode: _demoMode, provider: _provider, generalSettings: _general, ...accountData } = initial;
+            set(() => ({ ...accountData, user: { ...initial.user, currentUser: {} } }));
           },
         },
         demoMode: {
@@ -362,6 +400,18 @@ export const useFredyState = create(
               }));
             } catch (Exception) {
               console.error('Error while trying to get resource for api/version. Error:', Exception);
+            }
+          },
+        },
+        news: {
+          async getReleases() {
+            try {
+              const response = await xhrGet('/api/version/releases');
+              set((state) => ({
+                news: { ...state.news, releases: Array.isArray(response.json) ? response.json : [] },
+              }));
+            } catch (Exception) {
+              console.error('Error while trying to get resource for api/version/releases. Error:', Exception);
             }
           },
         },
@@ -403,12 +453,31 @@ export const useFredyState = create(
                 },
                 { skipNull: true, skipEmptyString: true },
               );
+              const ticket = nextTicket('listingsTable');
               const response = await xhrGet(`/api/listings/table?${qryString}`);
+              if (!isLatest('listingsTable', ticket)) return;
+              // `loaded` tells the count of the first answer from the zero the store starts with.
               set((state) => ({
-                listingsData: { ...state.listingsData, ...response.json },
+                listingsData: { ...state.listingsData, ...response.json, loaded: true },
               }));
             } catch (Exception) {
               console.error('Error while trying to get resource for api/listings. Error:', Exception);
+            }
+          },
+          /**
+           * Add one listing by its URL to one of the user's jobs.
+           *
+           * @param {{url: string, jobId: string, watch: boolean}} params
+           * @returns {Promise<{status: string, listingId?: string, jobName?: string|null, provider?: string}>}
+           *   The server's answer; a duplicate or an unreadable page is an answer, not an error.
+           */
+          async addListing({ url, jobId, watch }) {
+            try {
+              const response = await xhrPost('/api/listings', { url, jobId, watch });
+              return response.json;
+            } catch (Exception) {
+              console.error('Error while trying to add a listing by url. Error:', Exception);
+              throw Exception;
             }
           },
           async getListing(listingId) {
@@ -433,7 +502,9 @@ export const useFredyState = create(
                 },
                 { skipNull: true, skipEmptyString: true },
               );
+              const ticket = nextTicket('listingsMap');
               const response = await xhrGet(`/api/listings/map?${qryString}`);
+              if (!isLatest('listingsMap', ticket)) return;
               set((state) => ({
                 listingsData: {
                   ...state.listingsData,
@@ -572,6 +643,26 @@ export const useFredyState = create(
               }));
             } catch (Exception) {
               console.error('Error while trying to update the last seen news version. Error:', Exception);
+              throw Exception;
+            }
+          },
+          /**
+           * Remember that the toast announcing this available version has been seen.
+           *
+           * @param {string} version
+           * @returns {Promise<void>}
+           */
+          async setUpdateNoticeSeenVersion(version) {
+            try {
+              await xhrPost('/api/user/settings/update-notice-seen-version', { update_notice_seen_version: version });
+              set((state) => ({
+                userSettings: {
+                  ...state.userSettings,
+                  settings: { ...state.userSettings.settings, update_notice_seen_version: version },
+                },
+              }));
+            } catch (Exception) {
+              console.error('Error while trying to remember the update notice. Error:', Exception);
               throw Exception;
             }
           },
@@ -818,6 +909,7 @@ export const useFredyState = create(
         notificationAdapter: [],
         notificationChannels: { channels: [], loaded: false },
         listingsData: {
+          loaded: false,
           totalNumber: 0,
           page: 1,
           result: [],
@@ -829,6 +921,7 @@ export const useFredyState = create(
         userSettings: { settings: {}, loaded: false },
         demoMode: { demoMode: false },
         versionUpdate: {},
+        news: { releases: [] },
         tracking: { pois: {} },
         provider: [],
         jobsData: {
@@ -850,6 +943,7 @@ export const useFredyState = create(
         generalSettings: { ...effects.generalSettings },
         demoMode: { ...effects.demoMode },
         versionUpdate: { ...effects.versionUpdate },
+        news: { ...effects.news },
         tracking: { ...effects.tracking },
         listingsData: { ...effects.listingsData },
         provider: { ...effects.provider },
